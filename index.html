@@ -19,6 +19,12 @@ button{font:inherit;font-weight:800;background:var(--acc);color:#241a05;border:0
 button:focus-visible{outline:3px solid #fff;outline-offset:2px}
 #bar{height:6px;background:#0003;display:flex}
 #bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .2s}
+#tools{display:flex;gap:8px;padding:8px 14px;background:var(--bar);border-top:1px solid #0004;overflow-x:auto;align-items:center;white-space:nowrap}
+#tools span{font-size:.8rem;opacity:.7}
+#tools span:nth-of-type(2){margin-inline-start:10px}
+#tools button{padding:6px 12px;font-size:.85rem;flex:none}
+#tools .h{background:#7fc47f;color:#10260f}
+#tools .x{background:#e1654f;color:#2a0903}
 main{flex:1;position:relative;min-height:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:none}
 .hint{position:absolute;left:0;right:0;bottom:10px;text-align:center;font-size:.9rem;opacity:.8;pointer-events:none}
@@ -37,15 +43,16 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor
   <button id="again">Shuffle</button>
 </header>
 <div id="bar"><i id="fill"></i></div>
+<div id="tools"><span>Helpers (+8s)</span><button class="h" data-t="magnet">🧲 Magnet</button><button class="h" data-t="big">🥢 Big chopstick</button><button class="h" data-t="fix">✨ Fix 20</button><span>Troublemakers (−5s)</span><button class="x" data-t="wind">💨 Gust</button><button class="x" data-t="quake">🌋 Quake</button><button class="x" data-t="more">➕ 20 beans</button></div>
 <main>
   <canvas id="c"></canvas>
-  <div class="hint">Drag the chopstick to push beans: red to the left, black to the right.</div>
+  <div class="hint">Push every bean to its side: red left, black right. You win only at a perfect 100%.</div>
   <div id="win"><div><h2>All sorted!</h2><p id="wmsg"></p><button id="again2">Play again</button></div></div>
 </main>
 <script>
 (function(){
 var cv=document.getElementById('c'),ctx=cv.getContext('2d');
-var W,H,dpr,beans=[],N=340,t0=0,done=false,mouse={x:-99,y:-99,px:-99,py:-99,down:false};
+var W,H,dpr,beans=[],N=340,t0=0,done=false,R=46,allOk=false,adj=0,fx={magnet:0,big:0,quake:0},mouse={x:-99,y:-99,px:-99,py:-99,down:false};
 var $=function(i){return document.getElementById(i)};
 
 function resize(){
@@ -61,7 +68,7 @@ function init(){
     beans.push({x:Math.random()*W,y:Math.random()*H,vx:0,vy:0,a:Math.random()*6.28,
       red:i%2===0,r:r,s:Math.random()*.15+.92});
   }
-  t0=performance.now();done=false;$('win').classList.remove('on');
+  t0=performance.now();done=false;adj=0;fx.magnet=fx.big=fx.quake=0;$('win').classList.remove('on');
 }
 function pos(e){var b=cv.getBoundingClientRect();return{x:e.clientX-b.left,y:e.clientY-b.top}}
 cv.addEventListener('pointerdown',function(e){cv.setPointerCapture(e.pointerId);var p=pos(e);mouse.x=mouse.px=p.x;mouse.y=mouse.py=p.y;mouse.down=true});
@@ -72,11 +79,15 @@ window.addEventListener('resize',function(){var ow=W,oh=H;resize();beans.forEach
 
 function step(){
   var i,j,a,b,dx,dy,d,m,n;
+  R=fx.big>0?90:46;
+  if(fx.big>0)fx.big--;
+  if(fx.magnet>0){fx.magnet--;for(i=0;i<beans.length;i++)beans[i].vx+=(beans[i].red?-.45:.45)}
+  if(fx.quake>0){fx.quake--;for(i=0;i<beans.length;i++){beans[i].vx+=(Math.random()-.5)*4;beans[i].vy+=(Math.random()-.5)*4}}
   if(mouse.down){
     var vx=mouse.x-mouse.px,vy=mouse.y-mouse.py;
     for(i=0;i<beans.length;i++){
       a=beans[i];dx=a.x-mouse.x;dy=a.y-mouse.y;d=Math.sqrt(dx*dx+dy*dy);
-      if(d<46){var f=(1-d/46);a.vx+=vx*f*.5+(dx/(d||1))*f*1.2;a.vy+=vy*f*.5+(dy/(d||1))*f*1.2}
+      if(d<R){var f=(1-d/R);a.vx+=vx*f*.5+(dx/(d||1))*f*1.2;a.vy+=vy*f*.5+(dy/(d||1))*f*1.2}
     }
     mouse.px=mouse.x;mouse.py=mouse.y;
   }
@@ -122,13 +133,13 @@ function draw(){
     ctx.save();ctx.translate(mouse.x,mouse.y);ctx.rotate(-.5);
     ctx.fillStyle=mouse.down?'#e0a45a':'#d9a566';
     ctx.fillRect(-4,-4,150,8);ctx.restore();
-    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(mouse.x,mouse.y,46,0,6.283);ctx.stroke();
+    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(mouse.x,mouse.y,R,0,6.283);ctx.stroke();
   }
 }
 function score(){
   var ok=0;
   for(var i=0;i<beans.length;i++){var b=beans[i];if((b.x<W/2)===b.red)ok++}
-  var p=Math.round(ok/beans.length*100);
+  allOk=(ok===beans.length);var p=Math.floor(ok/beans.length*100);
   $('pct').textContent=p+'%';$('fill').style.width=p+'%';
   return p;
 }
@@ -137,12 +148,21 @@ var tick=0;
 function loop(){
   step();draw();
   if(!done&&++tick%6===0){
-    var el=(performance.now()-t0)/1000;$('time').textContent=fmt(el);
+    var el=Math.max(0,(performance.now()-t0)/1000+adj);$('time').textContent=fmt(el);
     var p=score();
-    if(p>=98&&el>2){done=true;$('wmsg').textContent='Sorted '+p+'% in '+fmt(el)+'.';$('win').classList.add('on')}
+    if(allOk){done=true;$('wmsg').textContent='Perfect 100% in '+fmt(el)+'.';$('win').classList.add('on')}
   }
   requestAnimationFrame(loop);
 }
+var tools={
+magnet:function(){fx.magnet=300;adj+=8},
+big:function(){fx.big=600;adj+=8},
+fix:function(){var c=0;beans.forEach(function(b){if(c<20&&(b.x<W/2)!==b.red){b.vx+=(b.red?-1:1)*16;b.vy+=(Math.random()-.5)*4;c++}});adj+=8},
+wind:function(){var s=Math.random()<.5?-1:1;beans.forEach(function(b){b.vx+=s*(10+Math.random()*6);b.vy+=(Math.random()-.5)*6});adj-=5},
+quake:function(){fx.quake=120;adj-=5},
+more:function(){for(var i=0;i<20;i++)beans.push({x:Math.random()*W,y:Math.random()*H,vx:0,vy:0,a:Math.random()*6.28,red:i%2===0,r:beans[0].r,s:1});adj-=5}
+};
+Array.prototype.forEach.call(document.querySelectorAll('#tools button'),function(bt){bt.onclick=function(){if(!done)tools[bt.dataset.t]()}});
 $('again').onclick=$('again2').onclick=init;
 init();loop();
 })();
